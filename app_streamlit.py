@@ -5,108 +5,115 @@ import pandas as pd
 import altair as alt
 import plotly.express as px
 
-# 1. Carregar dados diretamente do link
+# 1. Carregar dados a partir do Google Sheets (como na imagem)
 @st.cache_data
 def load_data():
+    from urllib.parse import quote
+
+    sheet_id = "1YSeoTdFP_ufNasAWSXWFCzNABEAJ1CM6"
+    sheet_name = "Data for Figure 2.1 (2011–2024)"
+    encoded_sheet_name = quote(sheet_name)
+
     url = (
         "https://happiness-report.s3.us-east-1.amazonaws.com/"
         "2025/Data+for+Figure+2.1+(2011%E2%80%932024).xlsx"
     )
     df = pd.read_excel(url)
-    df.columns = df.columns.str.strip().str.replace(' ', '_').str.lower()
-    df = df.rename(columns={'country_name': 'country', 'year': 'year'})
+
+    # Renomear colunas para padronização no código
+    df = df.rename(columns={
+        'Country name': 'Country',
+        'Ladder score': 'Ladder_score',
+        'Explained by: Log GDP per capita': 'GDP',
+        'Explained by: Social support': 'Social_support',
+        'Explained by: Healthy life expectancy': 'Health',
+        'Explained by: Freedom to make life choices': 'Freedom',
+        'Explained by: Generosity': 'Generosity',
+        'Explained by: Perceptions of corruption': 'Corruption',
+        'Dystopia + residual': 'Dystopia_residual'
+    })
+
     return df
 
 df = load_data()
 
-st.title("🌍 Dashboard de Felicidade Mundial 2011–2024")
-st.markdown(
-    "Exploração interativa dos níveis de felicidade (Cantril Ladder)"
-)
+st.title("📊 World Happiness Dashboard 2011–2024")
+st.markdown("Visualização interativa do World Happiness Report com base na Ladder Score e fatores explicativos.")
 
-# 2. Filtros laterais
+# 2. Filtros
 anos = st.sidebar.multiselect(
     "Selecione ano(s):",
-    sorted(df['year'].unique()),
+    sorted(df['Year'].unique()),
     default=[2023, 2024]
 )
+
 paises = st.sidebar.multiselect(
     "Selecione país(es):",
-    sorted(df['country'].unique()),
-    default=["Brazil", "United States", "Sweden"]
+    sorted(df['Country'].unique()),
+    default=["Brazil", "Sweden", "United States"]
 )
 
 df_filtro = df[
-    (df['year'].isin(anos)) &
-    (df['country'].isin(paises))
+    (df['Year'].isin(anos)) &
+    (df['Country'].isin(paises))
 ]
 
-# 3. Métricas gerais
-st.sidebar.markdown("### Métricas Globais")
-st.sidebar.metric("Total de países", df_filtro['country'].nunique())
-st.sidebar.metric("Períodos analisados", f"{min(anos)}–{max(anos)}")
+# 3. Métricas
+st.sidebar.metric("Total de países", df_filtro['Country'].nunique())
+st.sidebar.metric("Período", f"{min(anos)}–{max(anos)}")
 
-# 4. Gráfico de linhas interativo por país
-st.subheader("Evolução da Felicidade por País")
+# 4. Evolução da Ladder Score
+st.subheader("📈 Evolução da Ladder Score por país")
 line = (
     alt.Chart(df_filtro)
     .mark_line(point=True)
     .encode(
-        x="year:O",
-        y="life_evaluation:Q",
-        color="country:N",
-        tooltip=["country", "year", "life_evaluation"]
+        x="Year:O",
+        y="Ladder_score:Q",
+        color="Country:N",
+        tooltip=["Country", "Year", "Ladder_score"]
     )
     .interactive()
 )
 st.altair_chart(line, use_container_width=True)
 
-# 5. Ranking por ano selecionado
+# 5. Top 10 países por Ladder Score
 if anos:
-    ano_corrente = max(anos)
-    df_ano = df[df['year'] == ano_corrente]
-    top10 = df_ano.nlargest(10, 'life_evaluation')
-    st.subheader(f"Top 10 países em {ano_corrente}")
+    ano_ult = max(anos)
+    df_ano = df[df["Year"] == ano_ult]
+    top10 = df_ano.nlargest(10, "Ladder_score")
+    st.subheader(f"🏆 Top 10 países em {ano_ult}")
     fig = px.bar(
         top10,
-        x='life_evaluation',
-        y='country',
-        orientation='h',
-        color='life_evaluation',
-        color_continuous_scale='viridis',
-        labels={'life_evaluation':'Cantril Ladder', 'country':'País'}
+        x="Ladder_score",
+        y="Country",
+        orientation="h",
+        color="Ladder_score",
+        labels={"Ladder_score": "Ladder Score", "Country": "País"},
+        color_continuous_scale="viridis"
     )
     st.plotly_chart(fig, use_container_width=True)
 
-# 6. Análise de tendências por fatores
-st.subheader("Contribuição dos Fatores (ex: PIB, suporte social, saúde...)")
-fatores = [
-    'log_gdp_per_capita', 'social_support',
-    'healthy_life_expectancy', 'freedom',
-    'generosity', 'perceptions_of_corruption'
-]
-df_fatores = df_filtro.melt(
-    id_vars=['country', 'year', 'life_evaluation'],
-    value_vars=fatores,
-    var_name='fator',
-    value_name='valor'
-)
-filtro_fator = st.selectbox("Selecione o fator:", fatores, index=0)
-df_fat_filtrado = df_fatores[df_fatores['fator'] == filtro_fator]
+# 6. Gráfico de fatores explicativos
+st.subheader("🔎 Tendência de fatores explicativos")
+fatores = ["GDP", "Social_support", "Health", "Freedom", "Generosity", "Corruption", "Dystopia_residual"]
+fator_sel = st.selectbox("Selecione o fator:", fatores)
 
-fat_line = (
-    alt.Chart(df_fat_filtrado)
+df_fatores = df_filtro[["Year", "Country", fator_sel]]
+
+graf_fator = (
+    alt.Chart(df_fatores)
     .mark_line(point=True)
     .encode(
-        x='year:O',
-        y='valor:Q',
-        color='country:N',
-        tooltip=['country', 'year', 'valor']
+        x="Year:O",
+        y=alt.Y(fator_sel, title=fator_sel.replace("_", " ")),
+        color="Country:N",
+        tooltip=["Country", "Year", fator_sel]
     )
     .interactive()
 )
-st.altair_chart(fat_line, use_container_width=True)
+st.altair_chart(graf_fator, use_container_width=True)
 
-# 7. Dados brutos (expandir)
-with st.expander("📋 Mostrar tabela completa"):
+# 7. Tabela com dados brutos
+with st.expander("📄 Visualizar dados"):
     st.dataframe(df_filtro.reset_index(drop=True))
