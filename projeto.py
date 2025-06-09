@@ -15,7 +15,7 @@ def load_data():
     )
     df = pd.read_excel(url)
 
-    # Renomear colunas para facilitar o uso
+    # Renomear colunas para facilitar o uso"
     df = df.rename(columns={
         'Country name': 'Country',
         'year': 'Year',
