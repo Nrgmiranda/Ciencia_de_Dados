@@ -1,6 +1,6 @@
 # arquivo: app_streamlit.py
 
-import streamlit as st
+import dashboard as st
 import pandas as pd
 import altair as alt
 import plotly.express as px
